@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking System</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .status-card {
+            background: linear-gradient(145deg, #f0f0f0, #cacaca);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .status-card h3 {
+            color: #555;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .status-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .available { color: #28a745; }
+        .occupied { color: #dc3545; }
+        .gate-open { color: #28a745; }
+        .gate-closed { color: #dc3545; }
+
+        .parking-lot {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: linear-gradient(145deg, #e6e6e6, #ffffff);
+            border-radius: 20px;
+            box-shadow: inset 5px 5px 10px #d1d1d1, inset -5px -5px 10px #ffffff;
+        }
+
+        .parking-slot {
+            aspect-ratio: 2/1;
+            border: 3px solid #ddd;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .parking-slot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .parking-slot:hover::before {
+            left: 100%;
+        }
+
+        .slot-empty {
+            background: linear-gradient(145deg, #d4edda, #c3e6cb);
+            border-color: #28a745;
+            color: #155724;
+        }
+
+        .slot-occupied {
+            background: linear-gradient(145deg, #f8d7da, #f5c6cb);
+            border-color: #dc3545;
+            color: #721c24;
+        }
+
+        .slot-number {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .gate-control {
+            background: linear-gradient(145deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .gate-control:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .gate-control:active {
+            transform: translateY(0);
+        }
+
+        .system-status {
+            text-align: center;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .system-ready {
+            background: linear-gradient(145deg, #d4edda, #c3e6cb);
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
+        .system-not-ready {
+            background: linear-gradient(145deg, #f8d7da, #f5c6cb);
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+
+        .activity-log {
+            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .activity-log h3 {
+            margin-bottom: 15px;
+            color: #495057;
+        }
+
+        .log-entry {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .parking-lot {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Smart Parking System</h1>
+            <div id="systemStatus" class="system-status system-not-ready">
+                System Initializing...
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>Available Slots</h3>
+                <div id="availableSlots" class="status-value available">--</div>
+            </div>
+            <div class="status-card">
+                <h3>Occupied Slots</h3>
+                <div id="occupiedSlots" class="status-value occupied">--</div>
+            </div>
+            <div class="status-card">
+                <h3>Total Capacity</h3>
+                <div id="totalSlots" class="status-value">6</div>
+            </div>
+            <div class="status-card">
+                <h3>Gate Status</h3>
+                <div id="gateStatus" class="status-value gate-closed">CLOSED</div>
+            </div>
+        </div>
+
+        <div class="parking-lot" id="parkingLot">
+            <!-- Parking slots will be generated by JavaScript -->
+        </div>
+
+        <div class="controls">
+            <button id="gateToggle" class="gate-control">🚪 Toggle Gate</button>
+        </div>
+
+        <div class="activity-log">
+            <h3>📝 Recent Activity</h3>
+            <div id="activityLog">
+                <div class="log-entry">System starting up...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let activityLog = [];
+
+        // Initialize parking lot display
+        function initializeParkingLot() {
+            const parkingLot = document.getElementById('parkingLot');
+            parkingLot.innerHTML = '';
+            
+            for (let i = 0; i < 6; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'parking-slot slot-empty';
+                slot.id = `slot-${i}`;
+                slot.innerHTML = `
+                    <div class="slot-number">S${i + 1}</div>
+                    <div>EMPTY</div>
+                `;
+                parkingLot.appendChild(slot);
+            }
+        }
+
+        // Add activity log entry
+        function addLogEntry(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `${timestamp} - ${message}`;
+            activityLog.unshift(entry);
+            
+            // Keep only last 10 entries
+            if (activityLog.length > 10) {
+                activityLog = activityLog.slice(0, 10);
+            }
+            
+            updateActivityLog();
+        }
+
+        // Update activity log display
+        function updateActivityLog() {
+            const logContainer = document.getElementById('activityLog');
+            logContainer.innerHTML = activityLog.map(entry => 
+                `<div class="log-entry">${entry}</div>`
+            ).join('');
+        }
+
+        // Update parking system display
+        function updateParkingDisplay(data) {
+            // Update status cards
+            document.getElementById('availableSlots').textContent = data.availableSlots;
+            document.getElementById('occupiedSlots').textContent = data.totalSlots - data.availableSlots;
+            
+            // Update system status
+            const systemStatus = document.getElementById('systemStatus');
+            if (data.systemReady) {
+                systemStatus.textContent = '✅ System Online';
+                systemStatus.className = 'system-status system-ready';
+            } else {
+                systemStatus.textContent = '⏳ System Initializing...';
+                systemStatus.className = 'system-status system-not-ready pulse';
+            }
+            
+            // Update parking slots
+            data.slots.forEach((occupied, index) => {
+                const slotElement = document.getElementById(`slot-${index}`);
+                if (occupied) {
+                    slotElement.className = 'parking-slot slot-occupied';
+                    slotElement.innerHTML = `
+                        <div class="slot-number">S${index + 1}</div>
+                        <div>🚗 OCCUPIED</div>
+                    `;
+                } else {
+                    slotElement.className = 'parking-slot slot-empty';
+                    slotElement.innerHTML = `
+                        <div class="slot-number">S${index + 1}</div>
+                        <div>EMPTY</div>
+                    `;
+                }
+            });
+        }
+
+        // Socket event listeners
+        socket.on('parkingUpdate', (data) => {
+            updateParkingDisplay(data);
+            
+            if (data.message) {
+                addLogEntry(data.message);
+            }
+        });
+
+        socket.on('gateUpdate', (data) => {
+            const gateStatus = document.getElementById('gateStatus');
+            
+            if (data.gateOpen) {
+                gateStatus.textContent = 'OPEN';
+                gateStatus.className = 'status-value gate-open';
+            } else {
+                gateStatus.textContent = 'CLOSED';
+                gateStatus.className = 'status-value gate-closed';
+            }
+            
+            let message = '';
+            switch (data.action) {
+                case 'entry':
+                    message = 'Vehicle entering - Gate opened';
+                    break;
+                case 'exit':
+                    message = 'Vehicle exiting - Gate opened';
+                    break;
+                case 'closed':
+                    message = 'Gate closed';
+                    break;
+                case 'manual':
+                    message = `Gate ${data.gateOpen ? 'opened' : 'closed'} manually`;
+                    break;
+            }
+            
+            if (message) {
+                addLogEntry(message);
+            }
+        });
+
+        // Gate control button
+        document.getElementById('gateToggle').addEventListener('click', () => {
+            socket.emit('toggleGate');
+        });
+
+        // Initialize the display
+        initializeParkingLot();
+        addLogEntry('Web interface connected');
+    </script>
+</body>
+</html>
