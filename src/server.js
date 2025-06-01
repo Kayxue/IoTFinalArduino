@@ -25,11 +25,11 @@ const parkingState = {
 // Function to broadcast to all connected clients
 function broadcast(message) {
   const data = JSON.stringify(message);
-  connectedClients.forEach(ws => {
+  for (const ws of connectedClients) {
     if (ws.readyState === 1) { // WebSocket.OPEN
       ws.send(data);
     }
-  });
+  }
 }
 
 // WebSocket endpoint - Fixed configuration
@@ -48,7 +48,6 @@ app.get('/ws', upgradeWebSocket((c) => {
     
     onMessage(evt, ws) {
       try {
-        console.log('WebSocket message received:', evt.data);
         const message = JSON.parse(evt.data);
         
         switch (message.type) {
