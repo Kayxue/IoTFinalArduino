@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Parking System</title>
-    <script src="/socket.io/socket.io.js"></script>
     <style>
         * {
             margin: 0;
@@ -167,6 +166,12 @@
             transform: translateY(0);
         }
 
+        .gate-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .system-status {
             text-align: center;
             padding: 20px;
@@ -186,6 +191,12 @@
             background: linear-gradient(145deg, #f8d7da, #f5c6cb);
             color: #721c24;
             border: 2px solid #dc3545;
+        }
+
+        .system-disconnected {
+            background: linear-gradient(145deg, #fff3cd, #ffeaa7);
+            color: #856404;
+            border: 2px solid #ffc107;
         }
 
         .activity-log {
@@ -280,7 +291,7 @@
         </div>
 
         <div class="controls">
-            <button id="gateToggle" class="gate-control">🚪 Toggle Gate</button>
+            <button id="gateToggle" class="gate-control" disabled>🚪 Toggle Gate</button>
         </div>
 
         <div class="activity-log">
@@ -292,8 +303,75 @@
     </div>
 
     <script>
-        const socket = io();
+        let ws;
         let activityLog = [];
+        let isConnected = false;
+
+        // WebSocket connection
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                isConnected = true;
+                addLogEntry('Web interface connected');
+                
+                // Enable gate toggle button
+                document.getElementById('gateToggle').disabled = false;
+                
+                // Request current status
+                ws.send(JSON.stringify({ type: 'getStatus' }));
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    
+                    switch (message.type) {
+                        case 'parkingUpdate':
+                            updateParkingDisplay(message.data);
+                            if (message.data.message) {
+                                addLogEntry(message.data.message);
+                            }
+                            break;
+                            
+                        case 'gateUpdate':
+                            updateGateStatus(message.data);
+                            break;
+                            
+                        default:
+                            console.log('Unknown message type:', message.type);
+                    }
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            ws.onclose = function() {
+                console.log('WebSocket disconnected');
+                isConnected = false;
+                addLogEntry('Connection lost - attempting to reconnect...');
+                
+                // Disable gate toggle button
+                document.getElementById('gateToggle').disabled = true;
+                
+                // Update system status
+                const systemStatus = document.getElementById('systemStatus');
+                systemStatus.textContent = '⚠️ Connection Lost';
+                systemStatus.className = 'system-status system-disconnected pulse';
+                
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addLogEntry('Connection error occurred');
+            };
+        }
 
         // Initialize parking lot display
         function initializeParkingLot() {
@@ -350,6 +428,16 @@
                 systemStatus.className = 'system-status system-not-ready pulse';
             }
             
+            // Update gate status
+            const gateStatus = document.getElementById('gateStatus');
+            if (data.gateOpen) {
+                gateStatus.textContent = 'OPEN';
+                gateStatus.className = 'status-value gate-open';
+            } else {
+                gateStatus.textContent = 'CLOSED';
+                gateStatus.className = 'status-value gate-closed';
+            }
+            
             // Update parking slots
             data.slots.forEach((occupied, index) => {
                 const slotElement = document.getElementById(`slot-${index}`);
@@ -369,16 +457,8 @@
             });
         }
 
-        // Socket event listeners
-        socket.on('parkingUpdate', (data) => {
-            updateParkingDisplay(data);
-            
-            if (data.message) {
-                addLogEntry(data.message);
-            }
-        });
-
-        socket.on('gateUpdate', (data) => {
+        // Update gate status
+        function updateGateStatus(data) {
             const gateStatus = document.getElementById('gateStatus');
             
             if (data.gateOpen) {
@@ -403,21 +483,33 @@
                 case 'manual':
                     message = `Gate ${data.gateOpen ? 'opened' : 'closed'} manually`;
                     break;
+                case 'api':
+                    message = `Gate ${data.gateOpen ? 'opened' : 'closed'} via API`;
+                    break;
             }
             
             if (message) {
                 addLogEntry(message);
             }
-        });
+        }
 
         // Gate control button
         document.getElementById('gateToggle').addEventListener('click', () => {
-            socket.emit('toggleGate');
+            if (isConnected && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'toggleGate' }));
+            } else {
+                addLogEntry('Cannot control gate - not connected to system');
+            }
         });
 
-        // Initialize the display
-        initializeParkingLot();
-        addLogEntry('Web interface connected');
+        // Initialize the application
+        function init() {
+            initializeParkingLot();
+            connectWebSocket();
+        }
+
+        // Start the application when page loads
+        window.addEventListener('load', init);
     </script>
 </body>
 </html>
