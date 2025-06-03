@@ -17,7 +17,7 @@ const board = new Board();
 const parkingState = {
   slots: Array(6).fill(false), // false = empty, true = occupied
   totalSlots: 6,
-  availableSlots: 6,
+  avaliableSlots: 6,
   gateOpen: false,
   systemReady: false
 };
@@ -96,7 +96,7 @@ app.get('/api/status', (c) => {
 app.get('/api/slots', (c) => {
   return c.json({
     slots: parkingState.slots,
-    available: parkingState.availableSlots,
+    available: parkingState.avaliableSlots,
     total: parkingState.totalSlots
   });
 });
@@ -166,7 +166,7 @@ board.on("ready", () => {
   // Function to update LCD display
   function updateLCD() {
     lcd.clear();
-    lcd.cursor(0, 0).print(`Available: ${parkingState.availableSlots}/${parkingState.totalSlots}`);
+    lcd.cursor(0, 0).print(`Available: ${parkingState.avaliableSlots}/${parkingState.totalSlots}`);
     
     // Display slot status (2 slots per row)
     for (let i = 0; i < 6; i++) {
@@ -180,7 +180,7 @@ board.on("ready", () => {
   // Function to update available slots count
   function updateSlotCount() {
     const occupiedSlots = parkingState.slots.filter(slot => slot).length;
-    parkingState.availableSlots = parkingState.totalSlots - occupiedSlots;
+    parkingState.avaliableSlots = parkingState.totalSlots - occupiedSlots;
   }
   
   // Slot sensor event handlers
@@ -208,7 +208,7 @@ board.on("ready", () => {
   // Entry sensor handler
   innerSensor.on("change", function() {
     if (!this.value && !entryFlag) { // Sensor triggered (car detected)
-      if (parkingState.availableSlots > 0) {
+      if (parkingState.avaliableSlots > 0) {
         entryFlag = true;
         if (!exitFlag) {
           console.log("Car entering - Opening gate");
