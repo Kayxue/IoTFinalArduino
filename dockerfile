@@ -4,9 +4,7 @@ WORKDIR /app
 COPY . .
 
 ENV SHELL=/bin/sh
-RUN npm install -g pnpm
-RUN pnpm setup
-RUN pnpm install -g node-gyp
-RUN pnpm install
+RUN npm install -g node-gyp
+RUN npm install
 
 CMD ["npm", "start"]
