@@ -1,4 +1,13 @@
-FROM node:20 AS builder
+FROM node:20-slim AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    make \
+    g++ \
+    udev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . .
